@@ -28,7 +28,7 @@ The `dr-usb` Arch Linux live-USB system boots in four ways:
 			<th rowspan=2> GRUB Boot Mode </th>
 			<th rowspan=2> Description </th>
 			<th rowspan=2> Filesystem Mounted as Active Root </th>
-			<th colspan=2> Approximate Mean Best-Case Boot Time (Minutes)</th>
+			<th colspan=2> Approximate Mean Best-Case Boot Time </th>
 			<th rowspan=2> Pros </th>
 			<th rowspan=2> Cons </th>
 		</tr>
@@ -62,7 +62,7 @@ The `dr-usb` Arch Linux live-USB system boots in four ways:
 			<th> Overlay mode/Partial RAM mode </th>
 			<td> Uses Linux's hybrid Overlay Filesystem to efficiently load the OS to RAM while not copying the whole filesystem to RAM.</td>
 			<td> <code>tmpfs</code> on RAM (or <code>/.ramroot-private/upper/upper</code>) </td>
-			<td> 00:00.00 </td>
+			<td> 6 </td>
 			<td> 00:00.00 </td>
 			<td>
 				<ul>
@@ -85,7 +85,7 @@ The `dr-usb` Arch Linux live-USB system boots in four ways:
 			<td> Copies (almost) all of the contents of the USB to RAM. </td>
 			<td> <code>tmpfs</code> on RAM </td>
 			<td> 6 </td>
-			<td> 00:00.00 </td>
+			<td> 1.5 </td>
 			<td>
 				<ul>
 					<li> Runs the OS near-independently of the USB connection </li>
