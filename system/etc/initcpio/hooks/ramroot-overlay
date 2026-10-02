@@ -28,6 +28,35 @@ ramroot_overlay_mount_handler() {
         return 1
     fi
 
+    # A non-overlay boot (No RAM / Full RAM) wrote the base tree after the last snapshot.
+    if [ -e "$state_dir/dirty" ]; then
+        msg "[ramroot] Base tree changed outside overlay mode; seeding a new snapshot from it..."
+        mkdir -p "$state_dir/snapshots"
+        seed_name="seed-$(date +%Y%m%d%H%M%S)"
+        stage="$state_dir/snapshots/.stage-$seed_name"
+        old_current=$(cat "$state_dir/current" 2>/dev/null)
+        if ! rsync -aAXHS --numeric-ids --link-dest=/real_root \
+            --exclude='/dev/***' --exclude='/proc/***' --exclude='/sys/***' \
+            --exclude='/tmp/***' --exclude='/run/***' --exclude='/mnt/***' \
+            --exclude='/media/***' --exclude='/boot/***' --exclude='/lost+found/***' \
+            --exclude='/.ramroot-state/***' --exclude='/.ramroot-private/***' \
+            /real_root/ "$stage/" || \
+           ! mv "$stage" "$state_dir/snapshots/$seed_name"; then
+            rm -rf "$stage"
+            echo "[ramroot] ERROR: seeding a snapshot from the base tree failed."
+            launch_interactive_shell
+            return 1
+        fi
+        sync
+        case "$old_current" in
+            snapshots/*) printf '%s\n' "$old_current" > "$state_dir/previous" ;;
+        esac
+        printf 'snapshots/%s\n' "$seed_name" > "$state_dir/current.new"
+        mv -f "$state_dir/current.new" "$state_dir/current"
+        rm -f "$state_dir/dirty"
+        sync
+    fi
+
     current=$(cat "$state_dir/current" 2>/dev/null)
     case "$current" in
         snapshots/*)

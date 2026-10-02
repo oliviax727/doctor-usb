@@ -40,6 +40,9 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# Marks the base tree as newer than the overlay snapshots (set before writing, in case of a crash).
+mkdir -p "$TARGET/.ramroot-state" && touch "$TARGET/.ramroot-state/dirty" && sync -f "$TARGET"
+
 echo "[ramroot] :: Saving legacy RAM root to USB..."
 echo "[ramroot] :: Do not unplug the USB stick until the computer is fully powered off."
 rsync -aAXHS --numeric-ids --delete --no-inc-recursive --info=progress2 --human-readable \

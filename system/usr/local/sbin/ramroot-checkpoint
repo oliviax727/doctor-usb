@@ -71,6 +71,10 @@ else
         *) echo "[ramroot-checkpoint] Cannot identify active lower snapshot; refusing to prune." >&2; exit 1 ;;
     esac
     STATE="$PERSIST/.ramroot-state"
+    if [[ -e "$STATE/dirty" ]]; then
+        echo "[ramroot-checkpoint] Base tree changed outside overlay mode; refusing to overwrite it." >&2
+        exit 1
+    fi
     mkdir -p "$STATE/snapshots"
     current=$(cat "$STATE/current" 2>/dev/null || true)
     if [[ "$current" =~ ^snapshots/[A-Za-z0-9._-]+$ && -d "$STATE/$current" ]]; then

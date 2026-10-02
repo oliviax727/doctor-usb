@@ -2,6 +2,7 @@
 
 build() {
     add_module overlay
+    add_binary rsync
     add_binary /usr/bin/mount /usr/bin/mount-util
     add_runscript
 }

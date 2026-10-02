@@ -1,0 +1,11 @@
+[Unit]
+Description=Mark base tree as newer than overlay snapshots (No RAM boot)
+ConditionKernelCommandLine=!ramroot
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'mkdir -p /.ramroot-state && touch /.ramroot-state/dirty && sync -f /.ramroot-state'
+
+[Install]
+WantedBy=multi-user.target
