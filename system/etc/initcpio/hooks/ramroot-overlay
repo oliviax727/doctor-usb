@@ -32,8 +32,12 @@ ramroot_overlay_mount_handler() {
     if [ -e "$state_dir/dirty" ]; then
         msg "[ramroot] Base tree changed outside overlay mode; seeding a new snapshot from it..."
         mkdir -p "$state_dir/snapshots"
-        seed_name="seed-$(date +%Y%m%d%H%M%S)"
+        # The initramfs has no date(1); pick the first unused counter.
+        seed_n=1
+        while [ -e "$state_dir/snapshots/seed-$seed_n" ]; do seed_n=$((seed_n + 1)); done
+        seed_name="seed-$seed_n"
         stage="$state_dir/snapshots/.stage-$seed_name"
+        rm -rf "$stage"
         old_current=$(cat "$state_dir/current" 2>/dev/null)
         if ! rsync -aAXHS --numeric-ids --link-dest=/real_root \
             --exclude='/dev/***' --exclude='/proc/***' --exclude='/sys/***' \
