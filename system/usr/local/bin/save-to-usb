@@ -1,0 +1,60 @@
+#!/bin/bash
+set -uo pipefail
+
+if ! grep -qw ramroot /proc/cmdline; then
+    echo "[ramroot] :: Not running in RAM mode. Nothing to save, exiting." >&2
+    exit 1
+fi
+
+root_fstype=$(findmnt -n -o FSTYPE / 2>/dev/null || true)
+if [[ "$root_fstype" == "overlay" ]]; then
+    exec /usr/local/sbin/ramroot-checkpoint --final
+fi
+
+TARGET=/mnt/usb-root
+mkdir -p "$TARGET"
+mount /dev/sdb3 "$TARGET"
+target_mounted=1
+cleanup() {
+    status=$?
+    trap - EXIT INT TERM
+    printf '\n'
+    if [[ $target_mounted -eq 1 ]]; then
+        echo "[ramroot] :: Flushing and unmounting the USB filesystem; please wait..."
+        if umount "$TARGET"; then
+            target_mounted=0
+            rmdir "$TARGET" || status=1
+        else
+            echo "[ramroot] :: ERROR: could not unmount the USB filesystem." >&2
+            status=1
+        fi
+    fi
+    if [[ $status -eq 0 ]]; then
+        echo "[ramroot] :: Legacy root sync complete. Keep the USB connected until full power-off."
+    else
+        echo "[ramroot] :: Legacy sync ended with exit code $status." >&2
+    fi
+    exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+echo "[ramroot] :: Saving legacy RAM root to USB..."
+echo "[ramroot] :: Do not unplug the USB stick until the computer is fully powered off."
+rsync -aAXHS --numeric-ids --delete --no-inc-recursive --info=progress2 --human-readable \
+    --exclude='/dev/***' --exclude='/proc/***' --exclude='/sys/***' \
+    --exclude='/tmp/***' --exclude='/run/***' --exclude='/mnt/***' \
+    --exclude='/media/***' --exclude='/boot/***' --exclude='/lost+found/***' \
+    --exclude='/.ramroot-state/***' --exclude='/var/cache/***' \
+    --exclude='/var/tmp/***' --exclude='/root/.cache/***' \
+    --exclude='/home/*/.cache/***' --exclude='*cache*' --exclude='*Cache*' \
+    / "$TARGET/"
+rsync_status=$?
+printf '\n'
+if [[ $rsync_status -eq 24 ]]; then
+    echo "[ramroot] :: Some live files changed; continuing to unmount safely." >&2
+elif [[ $rsync_status -ne 0 ]]; then
+    echo "[ramroot] :: rsync failed with exit code $rsync_status." >&2
+    exit "$rsync_status"
+fi

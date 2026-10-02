@@ -1,0 +1,13 @@
+[Unit]
+Description=Checkpoint RAM OverlayFS root to persistent ext4
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ramroot-checkpoint
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+StandardOutput=journal
+StandardError=journal

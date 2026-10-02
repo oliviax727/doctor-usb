@@ -1,0 +1,96 @@
+#!/usr/bin/ash
+
+run_hook() {
+    if ! grep -qw ramroot /proc/cmdline; then
+        return 0
+    fi
+    mount_handler="ramroot_overlay_mount_handler"
+}
+
+ramroot_overlay_mount_handler() {
+    newroot="$1"
+    state_dir=/real_root/.ramroot-state
+    lower_source=/real_root
+    active_snapshot=base
+    M=/usr/bin/mount-util
+
+    if ! "$M" --make-rprivate /; then
+        echo "[ramroot] ERROR: could not privatize initramfs mounts."
+        launch_interactive_shell
+        return 1
+    fi
+
+    msg "[ramroot] Mounting persistent ext4 and selecting latest snapshot..."
+    mkdir -p /real_root /real_lower /ramroot-upper "$newroot"
+    if ! "$M" -o rw "${root}" /real_root; then
+        echo "[ramroot] ERROR: failed to mount persistent root device ${root}"
+        launch_interactive_shell
+        return 1
+    fi
+
+    current=$(cat "$state_dir/current" 2>/dev/null)
+    case "$current" in
+        snapshots/*)
+            snapshot="$state_dir/$current"
+            if [ -d "$snapshot" ]; then
+                lower_source="$snapshot"
+                active_snapshot="$current"
+            else
+                current=$(cat "$state_dir/previous" 2>/dev/null)
+                case "$current" in
+                    snapshots/*)
+                        snapshot="$state_dir/$current"
+                        if [ -d "$snapshot" ]; then
+                            lower_source="$snapshot"
+                            active_snapshot="$current"
+                        fi
+                        ;;
+                esac
+            fi
+            ;;
+    esac
+
+    if ! "$M" --bind "$lower_source" /real_lower || \
+       ! "$M" --make-private /real_lower || \
+       ! "$M" -o remount,bind,ro /real_lower; then
+        echo "[ramroot] ERROR: failed to prepare read-only lower snapshot."
+        launch_interactive_shell
+        return 1
+    fi
+
+    msg "[ramroot] Creating tmpfs upper layer..."
+    if ! "$M" -t tmpfs -o size=50%,mode=0755 tmpfs /ramroot-upper; then
+        echo "[ramroot] ERROR: failed to create RAM upper layer."
+        launch_interactive_shell
+        return 1
+    fi
+    mkdir -p /ramroot-upper/upper /ramroot-upper/work
+
+    msg "[ramroot] Mounting OverlayFS root..."
+    if ! "$M" -t overlay overlay -o "lowerdir=/real_lower,upperdir=/ramroot-upper/upper,workdir=/ramroot-upper/work" "$newroot"; then
+        echo "[ramroot] ERROR: OverlayFS mount failed; use the legacy GRUB entry to recover."
+        launch_interactive_shell
+        return 1
+    fi
+    "$M" --make-private "$newroot"
+
+    mkdir -p "$newroot/.ramroot-private/persist" "$newroot/.ramroot-private/lower" \
+        "$newroot/.ramroot-private/upper" "$newroot/dev" "$newroot/proc" \
+        "$newroot/sys" "$newroot/run" "$newroot/tmp" "$newroot/mnt" \
+        "$newroot/media" "$newroot/boot" "$newroot/var/cache" "$newroot/var/tmp"
+    chmod 700 "$newroot/.ramroot-private" "$newroot/.ramroot-private/persist" \
+        "$newroot/.ramroot-private/lower" "$newroot/.ramroot-private/upper"
+    chmod 1777 "$newroot/tmp" "$newroot/var/tmp"
+    printf '%s\n' "$active_snapshot" > "$newroot/.ramroot-private/active-lower"
+    chmod 600 "$newroot/.ramroot-private/active-lower"
+
+    if ! "$M" --move /real_root "$newroot/.ramroot-private/persist" || \
+       ! "$M" --move /real_lower "$newroot/.ramroot-private/lower" || \
+       ! "$M" --move /ramroot-upper "$newroot/.ramroot-private/upper"; then
+        echo "[ramroot] ERROR: failed moving overlay backing mounts; use legacy RAM rollback."
+        launch_interactive_shell
+        return 1
+    fi
+
+    msg "[ramroot] OverlayFS root is ready; ext4 snapshots run every 10 minutes."
+}

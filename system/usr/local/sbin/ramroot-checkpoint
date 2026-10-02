@@ -1,0 +1,154 @@
+#!/bin/bash
+set -uo pipefail
+
+MODE=${1:-periodic}
+SEED_MOUNT=/run/ramroot-seed
+PERSIST=/.ramroot-private/persist
+STATE=
+STAGE=
+MOUNTED=0
+ACTIVE_LOWER=
+
+cleanup() {
+    status=$?
+    trap - EXIT INT TERM
+    if [[ -n "$STAGE" && -d "$STAGE" ]]; then
+        rm -rf -- "$STAGE"
+    fi
+    if [[ $MOUNTED -eq 1 ]]; then
+        sync -f "$PERSIST" 2>/dev/null || status=1
+        umount "$PERSIST" || status=1
+        rmdir "$PERSIST" 2>/dev/null || true
+    fi
+    exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [[ "$MODE" == "--seed" ]]; then
+    if ! grep -qw ramroot /proc/cmdline || [[ "$(findmnt -n -o FSTYPE / 2>/dev/null)" != "tmpfs" ]]; then
+        echo "[ramroot-checkpoint] Refusing to seed unless running the legacy RAM root." >&2
+        exit 1
+    fi
+    mkdir -p "$SEED_MOUNT"
+    mount /dev/sdb3 "$SEED_MOUNT" || exit 1
+    PERSIST=$SEED_MOUNT
+    MOUNTED=1
+    STATE="$PERSIST/.ramroot-state"
+    mkdir -p "$STATE/snapshots"
+    current=$(cat "$STATE/current" 2>/dev/null || true)
+    if [[ "$current" =~ ^snapshots/[A-Za-z0-9._-]+$ && -d "$STATE/$current" ]]; then
+        LINK_BASE="$STATE/$current"
+    else
+        LINK_BASE=$PERSIST
+    fi
+else
+    root_fstype=$(findmnt -n -o FSTYPE / 2>/dev/null || true)
+    if [[ "$root_fstype" != "overlay" ]]; then
+        [[ "$MODE" == "--final" ]] && echo "[ramroot-checkpoint] Legacy RAM root; no overlay snapshot to checkpoint."
+        exit 0
+    fi
+    if ! mountpoint -q "$PERSIST"; then
+        echo "[ramroot-checkpoint] Overlay is active but persistent ext4 mount is missing." >&2
+        exit 1
+    fi
+    if ! mountpoint -q /.ramroot-private/lower; then
+        echo "[ramroot-checkpoint] Active lower mount is missing; refusing to checkpoint." >&2
+        exit 1
+    fi
+    lower_source=$(findmnt -n -o SOURCE /.ramroot-private/lower 2>/dev/null || true)
+    if [[ "$lower_source" == *deleted* ]]; then
+        echo "[ramroot-checkpoint] Active lower snapshot was pruned; refusing to checkpoint an incomplete merged tree." >&2
+        exit 1
+    fi
+    ACTIVE_LOWER=$(cat /.ramroot-private/active-lower 2>/dev/null || true)
+    if [[ -z "$ACTIVE_LOWER" ]]; then
+        ACTIVE_LOWER=$(printf '%s\n' "$lower_source" | sed -n 's#.*\[/.ramroot-state/\(snapshots/[A-Za-z0-9._-]*\).*#\1#p')
+    fi
+    case "$ACTIVE_LOWER" in
+        snapshots/*|base) ;;
+        *) echo "[ramroot-checkpoint] Cannot identify active lower snapshot; refusing to prune." >&2; exit 1 ;;
+    esac
+    STATE="$PERSIST/.ramroot-state"
+    mkdir -p "$STATE/snapshots"
+    current=$(cat "$STATE/current" 2>/dev/null || true)
+    if [[ "$current" =~ ^snapshots/[A-Za-z0-9._-]+$ && -d "$STATE/$current" ]]; then
+        LINK_BASE="$STATE/$current"
+    else
+        echo "[ramroot-checkpoint] Current snapshot pointer is invalid; refusing to checkpoint." >&2
+        exit 1
+    fi
+fi
+
+mkdir -p /run/lock
+exec 9>/run/lock/ramroot-checkpoint.lock
+flock -x 9
+
+current=$(cat "$STATE/current" 2>/dev/null || true)
+generation="$(date +%Y%m%d%H%M%S)-$$"
+STAGE="$STATE/snapshots/.stage-$generation"
+FINAL="$STATE/snapshots/$generation"
+mkdir -p "$STAGE"
+
+echo "[ramroot-checkpoint] Building snapshot $generation; unchanged files will be hard-linked."
+rsync -aAXHS --numeric-ids --delete --link-dest="$LINK_BASE" \
+    --exclude='/dev/***' --exclude='/proc/***' --exclude='/sys/***' \
+    --exclude='/tmp/***' --exclude='/run/***' --exclude='/mnt/***' \
+    --exclude='/media/***' --exclude='/boot/***' --exclude='/lost+found/***' \
+    --exclude='/.ramroot-state/***' --exclude='/.ramroot-private/***' \
+    --exclude='/var/cache/***' --exclude='/var/tmp/***' --exclude='/root/.cache/***' \
+    --exclude='/home/*/.cache/***' --exclude='/**/cache*/***' \
+    --exclude='/**/Cache*/***' --exclude='/**/GPUCache/***' \
+    --exclude='/**/Cached*/***' --exclude='/**/startupCache/***' \
+    / "$STAGE/"
+rsync_status=$?
+if [[ $rsync_status -eq 24 ]]; then
+    echo "[ramroot-checkpoint] Some live files changed during the snapshot; accepting this generation." >&2
+elif [[ $rsync_status -ne 0 ]]; then
+    echo "[ramroot-checkpoint] rsync failed with exit code $rsync_status; current snapshot remains unchanged." >&2
+    exit "$rsync_status"
+fi
+
+if [[ ! -x "$STAGE/sbin/init" || ! -x "$STAGE/usr/lib/systemd/systemd" || ! -d "$STAGE/etc" || ! -d "$STAGE/home/spot" ]]; then
+    echo "[ramroot-checkpoint] Refusing to commit an incomplete root snapshot; current pointer is unchanged." >&2
+    exit 1
+fi
+
+sync -f "$STAGE" || exit 1
+mv -- "$STAGE" "$FINAL" || exit 1
+STAGE=
+
+if [[ "$current" =~ ^snapshots/[A-Za-z0-9._-]+$ && -d "$STATE/$current" ]]; then
+    printf '%s\n' "$current" > "$STATE/previous.new"
+    mv -f -- "$STATE/previous.new" "$STATE/previous"
+fi
+printf 'snapshots/%s\n' "$generation" > "$STATE/current.new"
+mv -f -- "$STATE/current.new" "$STATE/current"
+sync -f "$STATE" || exit 1
+
+keep_previous=$(cat "$STATE/previous" 2>/dev/null || true)
+active_name=${ACTIVE_LOWER#snapshots/}
+for snapshot in "$STATE"/snapshots/*; do
+    [[ -d "$snapshot" ]] || continue
+    name=${snapshot##*/}
+    [[ "$name" == "$generation" || "$name" == "${keep_previous#snapshots/}" || "$name" == "$active_name" ]] && continue
+    rm -rf -- "$snapshot"
+done
+sync -f "$PERSIST" || exit 1
+
+# Keep the base ext4 tree in parity with the committed snapshot so the plain
+# (non-RAM) GRUB entry, which boots the base tree directly, sees current data.
+# --delete never removes excluded paths, so mountpoints/state dirs are untouched.
+echo "[ramroot-checkpoint] Syncing base root for non-RAM boot parity..."
+if ! rsync -aAXHS --numeric-ids --delete --link-dest="$FINAL" \
+    --exclude='/dev/***' --exclude='/proc/***' --exclude='/sys/***' \
+    --exclude='/tmp/***' --exclude='/run/***' --exclude='/mnt/***' \
+    --exclude='/media/***' --exclude='/boot/***' --exclude='/lost+found/***' \
+    --exclude='/.ramroot-state/***' --exclude='/.ramroot-private/***' \
+    "$FINAL/" "$PERSIST/"; then
+    echo "[ramroot-checkpoint] WARNING: base root parity sync failed; non-RAM boot entry may be stale." >&2
+fi
+sync -f "$PERSIST" || true
+
+echo "[ramroot-checkpoint] Snapshot $generation is committed; retained current, previous, and active-boot lower generations."

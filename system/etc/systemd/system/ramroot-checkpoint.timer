@@ -1,0 +1,11 @@
+[Unit]
+Description=Checkpoint RAM OverlayFS root every ten minutes
+
+[Timer]
+OnBootSec=10min
+OnUnitInactiveSec=10min
+AccuracySec=30s
+Unit=ramroot-checkpoint.service
+
+[Install]
+WantedBy=timers.target

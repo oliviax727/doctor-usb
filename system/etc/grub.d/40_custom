@@ -1,0 +1,124 @@
+#!/bin/sh
+exec tail -n +3 $0
+# Custom GRUB entries for dr-usb. Maintained in the doctor-usb git repo;
+# re-deploy with deploy-doctor-usb.sh after editing the repo copy.
+#
+# 4 boot modes x 2 targets (Desktop GUI / Terminal only) = 8 entries, grouped
+# into submenus. Terminal entries add systemd.unit=multi-user.target so no
+# display manager is started at all (fastest text-only path).
+
+submenu 'No RAM  (boots directly from the USB disk)' --class arch --class gnu-linux --class gnu --class os {
+	menuentry 'Desktop (GUI)' --class arch --class gnu-linux --class gnu --class os {
+		load_video
+		set gfxpayload=keep
+		insmod gzio
+		insmod part_gpt
+		insmod part_msdos
+		insmod fat
+		search --no-floppy --fs-uuid --set=root AB8A-677A
+		echo	'Loading Linux (No RAM / Desktop) ...'
+		linux	/vmlinuz-linux root=UUID=3bc5c958-a632-4e49-a091-dc1bab052169 rw loglevel=3 quiet
+		echo	'Loading initial ramdisk ...'
+		initrd	/intel-ucode.img /amd-ucode.img /initramfs-linux.img
+	}
+	menuentry 'Terminal only (no GUI)' --class arch --class gnu-linux --class gnu --class os {
+		load_video
+		set gfxpayload=keep
+		insmod gzio
+		insmod part_gpt
+		insmod part_msdos
+		insmod fat
+		search --no-floppy --fs-uuid --set=root AB8A-677A
+		echo	'Loading Linux (No RAM / Terminal) ...'
+		linux	/vmlinuz-linux root=UUID=3bc5c958-a632-4e49-a091-dc1bab052169 rw loglevel=3 quiet systemd.unit=multi-user.target
+		echo	'Loading initial ramdisk ...'
+		initrd	/intel-ucode.img /amd-ucode.img /initramfs-linux.img
+	}
+}
+
+submenu 'Overlay RAM  (fast boot, auto-snapshots every 10 min)' --class arch --class gnu-linux --class gnu --class os {
+	menuentry 'Desktop (GUI)' --class arch --class gnu-linux --class gnu --class os {
+		load_video
+		set gfxpayload=keep
+		insmod gzio
+		insmod part_gpt
+		insmod part_msdos
+		insmod fat
+		search --no-floppy --fs-uuid --set=root AB8A-677A
+		echo	'Loading Linux (Overlay RAM / Desktop) ...'
+		linux	/vmlinuz-linux root=UUID=3bc5c958-a632-4e49-a091-dc1bab052169 rw ramroot loglevel=3 quiet
+		echo	'Loading OverlayFS initramfs ...'
+		initrd	/intel-ucode.img /amd-ucode.img /initramfs-linux-overlay.img
+	}
+	menuentry 'Terminal only (no GUI)' --class arch --class gnu-linux --class gnu --class os {
+		load_video
+		set gfxpayload=keep
+		insmod gzio
+		insmod part_gpt
+		insmod part_msdos
+		insmod fat
+		search --no-floppy --fs-uuid --set=root AB8A-677A
+		echo	'Loading Linux (Overlay RAM / Terminal) ...'
+		linux	/vmlinuz-linux root=UUID=3bc5c958-a632-4e49-a091-dc1bab052169 rw ramroot loglevel=3 quiet systemd.unit=multi-user.target
+		echo	'Loading OverlayFS initramfs ...'
+		initrd	/intel-ucode.img /amd-ucode.img /initramfs-linux-overlay.img
+	}
+}
+
+submenu 'Full RAM  (legacy: entire root copied into RAM, slow boot)' --class arch --class gnu-linux --class gnu --class os {
+	menuentry 'Desktop (GUI)' --class arch --class gnu-linux --class gnu --class os {
+		load_video
+		set gfxpayload=keep
+		insmod gzio
+		insmod part_gpt
+		insmod part_msdos
+		insmod fat
+		search --no-floppy --fs-uuid --set=root AB8A-677A
+		echo	'Loading Linux (Full RAM / Desktop) ...'
+		linux	/vmlinuz-linux root=UUID=3bc5c958-a632-4e49-a091-dc1bab052169 rw ramroot loglevel=3 quiet
+		echo	'Loading initial ramdisk ...'
+		initrd	/intel-ucode.img /amd-ucode.img /initramfs-linux.img
+	}
+	menuentry 'Terminal only (no GUI)' --class arch --class gnu-linux --class gnu --class os {
+		load_video
+		set gfxpayload=keep
+		insmod gzio
+		insmod part_gpt
+		insmod part_msdos
+		insmod fat
+		search --no-floppy --fs-uuid --set=root AB8A-677A
+		echo	'Loading Linux (Full RAM / Terminal) ...'
+		linux	/vmlinuz-linux root=UUID=3bc5c958-a632-4e49-a091-dc1bab052169 rw ramroot loglevel=3 quiet systemd.unit=multi-user.target
+		echo	'Loading initial ramdisk ...'
+		initrd	/intel-ucode.img /amd-ucode.img /initramfs-linux.img
+	}
+}
+
+submenu 'Rollback RAM  (previous Full-RAM initramfs, for recovery)' --class arch --class gnu-linux --class gnu --class os {
+	menuentry 'Desktop (GUI)' --class arch --class gnu-linux --class gnu --class os {
+		load_video
+		set gfxpayload=keep
+		insmod gzio
+		insmod part_gpt
+		insmod part_msdos
+		insmod fat
+		search --no-floppy --fs-uuid --set=root AB8A-677A
+		echo	'Loading Linux (Rollback RAM / Desktop) ...'
+		linux	/vmlinuz-linux root=UUID=3bc5c958-a632-4e49-a091-dc1bab052169 rw ramroot loglevel=3 quiet
+		echo	'Loading legacy initramfs ...'
+		initrd	/intel-ucode.img /amd-ucode.img /initramfs-linux.img.pre-monotonic-boot
+	}
+	menuentry 'Terminal only (no GUI)' --class arch --class gnu-linux --class gnu --class os {
+		load_video
+		set gfxpayload=keep
+		insmod gzio
+		insmod part_gpt
+		insmod part_msdos
+		insmod fat
+		search --no-floppy --fs-uuid --set=root AB8A-677A
+		echo	'Loading Linux (Rollback RAM / Terminal) ...'
+		linux	/vmlinuz-linux root=UUID=3bc5c958-a632-4e49-a091-dc1bab052169 rw ramroot loglevel=3 quiet systemd.unit=multi-user.target
+		echo	'Loading legacy initramfs ...'
+		initrd	/intel-ucode.img /amd-ucode.img /initramfs-linux.img.pre-monotonic-boot
+	}
+}

@@ -1,0 +1,34 @@
+#!/usr/bin/ash
+
+run_hook() {
+    if ! grep -qw ramroot /proc/cmdline; then
+        return 0
+    fi
+    mount_handler="ramroot_mount_handler"
+}
+
+ramroot_mount_handler() {
+    newroot="$1"
+
+    msg "[ramroot] Mounting the USB root read-only..."
+    mkdir -p /real_root
+    if ! mount -o ro "${root}" /real_root; then
+        echo "[ramroot] ERROR: failed to mount real root device ${root}"
+        launch_interactive_shell
+        return 1
+    fi
+
+    msg "[ramroot] Creating tmpfs and copying root into RAM..."
+    mount -t tmpfs -o size=90% tmpfs "$newroot"
+    if ! rsync -aAXHS --numeric-ids --no-inc-recursive --info=progress2 --human-readable \
+        /real_root/ "$newroot"/; then
+        echo "[ramroot] ERROR: legacy root copy to RAM failed."
+        launch_interactive_shell
+        return 1
+    fi
+    printf '\n'
+
+    umount /real_root
+    rmdir /real_root
+    msg "[ramroot] Legacy RAM root is ready."
+}

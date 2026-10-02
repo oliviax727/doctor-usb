@@ -1,0 +1,13 @@
+#!/bin/bash
+
+build() {
+    add_module overlay
+    add_binary /usr/bin/mount /usr/bin/mount-util
+    add_runscript
+}
+
+help() {
+    cat <<HELPEOF
+Mounts the latest ext4 snapshot as an OverlayFS lower with a tmpfs upper.
+HELPEOF
+}

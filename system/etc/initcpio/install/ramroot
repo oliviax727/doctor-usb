@@ -1,0 +1,12 @@
+#!/bin/bash
+
+build() {
+    add_binary rsync
+    add_runscript
+}
+
+help() {
+    cat <<HELPEOF
+Legacy ramroot fallback: copies the full root into a tmpfs before switching root.
+HELPEOF
+}

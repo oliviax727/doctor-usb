@@ -1,0 +1,14 @@
+# Static information about the filesystems.
+# See fstab(5) for details.
+
+# <file system> <dir> <type> <options> <dump> <pass>
+# /dev/sdb3
+# Root is mounted by the initramfs; avoid remounting the OverlayFS as ext4.
+# UUID=3bc5c958-a632-4e49-a091-dc1bab052169 / ext4      	rw,relatime	0 1
+
+# /dev/sdb1
+UUID=AB8A-677A      	/boot     	vfat      	rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro	0 2
+
+# /dev/sdb2
+UUID=1f136c92-95b1-4a9e-992a-03ec77f60126	none      	swap      	defaults  	0 0
+
