@@ -62,7 +62,7 @@ The `dr-usb` Arch Linux live-USB system boots in four ways:
 			<th> Overlay mode/Partial RAM mode </th>
 			<td> Uses Linux's hybrid Overlay Filesystem to efficiently load the OS to RAM while not copying the whole filesystem to RAM.</td>
 			<td> <code>tmpfs</code> on RAM (or <code>/.ramroot-private/upper/upper</code>) </td>
-			<td> 6 </td>
+			<td> 1.5 </td>
 			<td> 00:00.00 </td>
 			<td>
 				<ul>
