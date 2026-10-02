@@ -28,7 +28,7 @@ The `dr-usb` Arch Linux live-USB system boots in four ways:
 			<th rowspan=2> GRUB Boot Mode </th>
 			<th rowspan=2> Description </th>
 			<th rowspan=2> Filesystem Mounted as Active Root </th>
-			<th colspan=2> Mean Best-Case Reboot Time </th>
+			<th colspan=2> Approximate Mean Best-Case Boot Time (Minutes)</th>
 			<th rowspan=2> Pros </th>
 			<th rowspan=2> Cons </th>
 		</tr>
@@ -84,7 +84,7 @@ The `dr-usb` Arch Linux live-USB system boots in four ways:
 			<th> Full-RAM mode/RAM-only mode </th>
 			<td> Copies (almost) all of the contents of the USB to RAM. </td>
 			<td> <code>tmpfs</code> on RAM </td>
-			<td> 00:00.00 </td>
+			<td> 6 </td>
 			<td> 00:00.00 </td>
 			<td>
 				<ul>
@@ -106,9 +106,7 @@ The `dr-usb` Arch Linux live-USB system boots in four ways:
 			<th> Emergency Full-RAM Rollback mode </th>
 			<td> Uses Linux's hybrid Overlay Filesystem to efficiently load the OS to RAM while not copying the whole filesystem to RAM.</td>
 			<td> <code>tmpfs</code> on RAM (or <code>/.ramroot-private/upper/upper</code>) </td>
-			<td> 00:00.00 </td>
-			<td> 00:00.00 </td>
-			<td colspan=2>
+			<td colspan=4>
 				This mode is similar in operation to Full-RAM mode but is done with the intent to have a fallback in the case of failiure, using a previous stable version of initramfs from a previous iteration of the code.
 			</td>
 		</tr>
